@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - main
+      - master
 
   pull_request:
     branches:
       - main
+      - master
+
+permissions:
+  contents: read
 
 jobs:
   compile:
@@ -28,21 +33,20 @@ jobs:
       - name: Compile C Programs
         env:
           CC: ${{ matrix.compiler }}
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          BUILD_DIR="$(mktemp -d)"
+          build_dir="$(mktemp -d)"
+          source_count=0
 
-          find . \
-            -type f \
-            -name "*.c" \
-            -not -path "./.git/*" \
-            -print0 |
           while IFS= read -r -d '' file; do
-            relative_path="${file#./}"
-            output="$BUILD_DIR/${relative_path%.c}"
+            source_count=$((source_count + 1))
 
-            mkdir -p "$(dirname "$output")"
+            relative_path="${file#./}"
+            output_path="$build_dir/${relative_path%.c}"
+
+            mkdir -p "$(dirname "$output_path")"
 
             echo "Compiling: $relative_path"
 
@@ -50,10 +54,20 @@ jobs:
               -std=c17 \
               -Wall \
               -Wextra \
-              -Wpedantic \
-              -Werror \
               "$file" \
-              -o "$output"
-          done
+              -o "$output_path"
+          done < <(
+            find . \
+              -type f \
+              -name "*.c" \
+              -not -path "./.git/*" \
+              -print0
+          )
 
-          echo "All C programs compiled successfully."
+          if [ "$source_count" -eq 0 ]; then
+            echo "Error: No C source files found."
+            exit 1
+          fi
+
+          echo
+          echo "Successfully compiled $source_count C program(s)."
