@@ -2,33 +2,58 @@ name: C CI
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+
   pull_request:
-    branches: [main, master]
+    branches:
+      - main
 
 jobs:
-  build:
+  compile:
+    name: Compile with ${{ matrix.compiler }}
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
-        compiler: [gcc, clang]
+        compiler:
+          - gcc
+          - clang
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.compiler }}
-
-      - name: Compile
+      - name: Compile C Programs
         env:
           CC: ${{ matrix.compiler }}
         run: |
-          $CC -std=c17 -Wall -Wextra -Wpedantic -Werror \
-            src/*.c -o app
+          set -e
 
-      - name: Run
-        run: ./app
+          BUILD_DIR="$(mktemp -d)"
+
+          find . \
+            -type f \
+            -name "*.c" \
+            -not -path "./.git/*" \
+            -print0 |
+          while IFS= read -r -d '' file; do
+            relative_path="${file#./}"
+            output="$BUILD_DIR/${relative_path%.c}"
+
+            mkdir -p "$(dirname "$output")"
+
+            echo "Compiling: $relative_path"
+
+            "$CC" \
+              -std=c17 \
+              -Wall \
+              -Wextra \
+              -Wpedantic \
+              -Werror \
+              "$file" \
+              -o "$output"
+          done
+
+          echo "All C programs compiled successfully."
